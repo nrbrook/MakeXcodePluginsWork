@@ -33,7 +33,6 @@ select opt in "Unsign Xcode" "Update plugins" "Quit" ; do
 				echo "Failed."
 			fi
 			rm -rf "$tmpRepoPath"
-			cd "$pluginsDir"
 		else
 			echo "Didn't type unsign."
 		fi
