@@ -1,66 +1,123 @@
 #!/bin/bash
 
-xcodePath=/Applications/Xcode.app
+xcodePath="/Applications/Xcode.app"
+binaryPath="$xcodePath/Contents/MacOS/Xcode"
 pluginsDir="$HOME/Library/Application Support/Developer/Shared/Xcode/Plug-ins/"
 tmpRepoPath="/tmp/unsign-updatePlugins"
 
+bold=$(tput bold)
+normal=$(tput sgr0)
+
+function print {
+	echo "${bold}$1${normal}"
+}
+
 if pgrep "Xcode" > /dev/null
 then
-    echo "Xcode is Running, please quit first"
+    print "${bold}Xcode is Running, please quit first${normal}"
     exit 1
 fi
 
-PS3="Which do you want to do?: "
-select opt in "Unsign Xcode" "Update plugins" "Quit" ; do 
-	if (( REPLY == 1 )) ; then
-		echo "This will unsign Xcode which cannot be undone other than by re-downloading Xcode. To continue, type 'unsign'. To cancel, hit return."
-		read typed
-		if [ "$typed" == "unsign" ] ; then
-			rm -rf "$tmpRepoPath"
-			mkdir "$tmpRepoPath"
-			cd $tmpRepoPath
-			git clone git@github.com:steakknife/unsign.git
-			cd unsign
-			make
-			binaryPath="$xcodePath/Contents/MacOS/Xcode"
-			./unsign "$binaryPath"
-			status=$?
-			if [ $status -eq 0 ]; then
-				mv "$binaryPath" "$binaryPath.signed"
-				mv "$binaryPath.unsigned" "$binaryPath"
-				echo "Done!"
-			else
-				echo "Failed."
-			fi
-			rm -rf "$tmpRepoPath"
-		else
-			echo "Didn't type unsign."
-		fi
+while true
+do
 
-	elif (( REPLY == 2)) ; then
-		UUID=$(defaults read /Applications/Xcode.app/Contents/Info DVTPlugInCompatibilityUUID)
-		cd "$pluginsDir"
+	declare -a mainOptTests=("unsign" "restoreUnsigned" "restoreSigned" "update" "quit")
+	declare -a mainOpts=("Unsign Xcode" "Restore unsigned Xcode" "Restore signed Xcode" "Update plugins" "Quit")
 
-		options=( $(find . -name "*.xcplugin" -maxdepth 1 -print0 | xargs -0) )
-
-		PS3="Please select a plugin to fix: "
-		select opt in "${options[@]}" "Quit" ; do 
-			if (( REPLY == 1 + ${#options[@]} )) ; then
-				exit
-
-		    elif (( REPLY > 0 && REPLY <= ${#options[@]} )) ; then
-		    	defaults write "$pluginsDir$opt/Contents/Info"  DVTPlugInCompatibilityUUIDs -array-add $UUID
-		        echo  "Upgraded $opt"
-
-		    else
-		        echo "Invalid option. Try another one."
-		    fi
-		done
-
+	if [ -f "$binaryPath.unsigned" ]; then
+		unset mainOptTests[2]
+		unset mainOpts[2]
+	elif [ -f "$binaryPath.signed" ]; then
+		unset mainOpts[0]
+		unset mainOptTests[0]
+		unset mainOpts[1]
+		unset mainOptTests[1]
 	else
-		exit
+		unset mainOpts[1]
+		unset mainOptTests[1]
+		unset mainOpts[2]
+		unset mainOptTests[2]
 	fi
-done
 
+	mainOptTests=( "${mainOptTests[@]}" )
+	mainOpts=( "${mainOpts[@]}" )
+
+	echo "${bold}"
+	PS3="Which do you want to do?: ${normal}"
+	select opt in "${mainOpts[@]}" ; do 
+		echo "${normal}"
+		testRes=${mainOptTests[REPLY-1]}
+		case $testRes in
+			"unsign" )
+				print "This will unsign Xcode which cannot be undone other than by re-downloading Xcode. To continue, type 'unsign'. To cancel, hit return."
+				read typed
+				if [ "$typed" == "unsign" ] ; then
+					rm -rf "$tmpRepoPath"
+					mkdir "$tmpRepoPath"
+					cd $tmpRepoPath
+					echo "Cloning unsign repository"
+					git clone git@github.com:steakknife/unsign.git
+					cd unsign
+					make
+					
+					print "Unsigning (admin permissions required)"
+					sudo ./unsign "$binaryPath"
+					status=$?
+					if [ $status -eq 0 ]; then
+						sudo mv "$binaryPath" "$binaryPath.signed"
+						sudo mv "$binaryPath.unsigned" "$binaryPath"
+						print "Done!"
+					else
+						print "Failed."
+					fi
+					rm -rf "$tmpRepoPath"
+				else
+					print "Didn't type unsign."
+				fi
+				break
+				;;
+			"restoreUnsigned" )
+				sudo mv "$binaryPath" "$binaryPath.signed"
+				sudo mv "$binaryPath.unsigned" "$binaryPath"
+				print "Restored unsigned binary"
+				break
+				;;
+			"restoreSigned" )
+				sudo mv "$binaryPath" "$binaryPath.unsigned"
+				sudo mv "$binaryPath.signed" "$binaryPath"
+				print "Restored signed binary"
+				break
+				;;
+			"update" )
+				UUID=$(defaults read /Applications/Xcode.app/Contents/Info DVTPlugInCompatibilityUUID)
+				cd "$pluginsDir"
+
+				options=( $(find . -name "*.xcplugin" -maxdepth 1 -print0 | xargs -0) )
+
+				echo "${bold}"
+				PS3="Please select a plugin to update: ${normal}"
+				select opt in "${options[@]}" "Back" "Quit" ; do 
+					if (( REPLY == 1 + ${#options[@]} )) ; then
+						break
+
+					elif (( REPLY == 2 + ${#options[@]} )) ; then
+						exit
+
+				    elif (( REPLY > 0 && REPLY <= ${#options[@]} )) ; then
+				    	defaults write "$pluginsDir$opt/Contents/Info"  DVTPlugInCompatibilityUUIDs -array-add $UUID
+				        print "Upgraded $opt"
+
+				    else
+				        print "Invalid option. Try another one."
+				    fi
+				done
+				break
+				;;
+			"quit" )
+				exit
+				;;
+		esac
+	done
+done
 
 
