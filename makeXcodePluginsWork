@@ -49,7 +49,7 @@ do
 		testRes=${mainOptTests[REPLY-1]}
 		case $testRes in
 			"unsign" )
-				print "This will unsign Xcode which cannot be undone other than by re-downloading Xcode. To continue, type 'unsign'. To cancel, hit return."
+				print "This will unsign Xcode. This can be reversed using this script. To continue, type 'unsign'. To cancel, hit return."
 				read typed
 				if [ "$typed" == "unsign" ] ; then
 					rm -rf "$tmpRepoPath"
