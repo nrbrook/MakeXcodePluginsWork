@@ -92,7 +92,9 @@ do
 				UUID=$(defaults read /Applications/Xcode.app/Contents/Info DVTPlugInCompatibilityUUID)
 				cd "$pluginsDir"
 
-				options=( $(find . -name "*.xcplugin" -maxdepth 1 -print0 | xargs -0) )
+				while read -d '' -r; do
+				    options+=( "$REPLY" )
+				done < <(find . -name "*.xcplugin" -maxdepth 1 -print0)
 
 				echo "${bold}"
 				PS3="Please select a plugin to update: ${normal}"
