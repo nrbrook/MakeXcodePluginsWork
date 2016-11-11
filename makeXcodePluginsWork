@@ -2,7 +2,8 @@
 
 xcodePath="/Applications/Xcode.app"
 binaryPath="$xcodePath/Contents/MacOS/Xcode"
-pluginsDir="$HOME/Library/Application Support/Developer/Shared/Xcode/Plug-ins/"
+pluginsDir="$HOME/Library/Application Support/Developer/Shared/Xcode/Plug-ins"
+altPluginsDir="$HOME/Library/Developer/Xcode/Plug-ins"
 tmpRepoPath="/tmp/unsign-updatePlugins"
 
 bold=$(tput bold)
@@ -90,11 +91,19 @@ do
 				;;
 			"update" )
 				UUID=$(defaults read /Applications/Xcode.app/Contents/Info DVTPlugInCompatibilityUUID)
-				cd "$pluginsDir"
 
-				while read -d '' -r; do
-				    options+=( "$REPLY" )
-				done < <(find . -name "*.xcplugin" -maxdepth 1 -print0)
+				function findPlugins {
+					plugins=()
+					while read -d '' -r; do
+					    plugins+=( "$REPLY" )
+					done < <(find "$1" -name "*.xcplugin" -maxdepth 1 -print0)
+				}
+
+				findPlugins "$pluginsDir"
+				options=$plugins
+				findPlugins "$altPluginsDir"
+				options=( "${options[@]}" "${plugins[@]}" )
+
 
 				echo "${bold}"
 				PS3="Please select a plugin to update: ${normal}"
@@ -106,7 +115,7 @@ do
 						exit
 
 				    elif (( REPLY > 0 && REPLY <= ${#options[@]} )) ; then
-				    	defaults write "$pluginsDir$opt/Contents/Info"  DVTPlugInCompatibilityUUIDs -array-add $UUID
+				    	defaults write "$opt/Contents/Info"  DVTPlugInCompatibilityUUIDs -array-add $UUID
 				        print "Upgraded $opt"
 
 				    else
