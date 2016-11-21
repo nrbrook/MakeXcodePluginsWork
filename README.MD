@@ -12,6 +12,10 @@ Uses the unsign project at [https://github.com/steakknife/unsign](https://github
 
 This doesn't fix the problem long term! If you like plugins, Be sure to file a radar at [https://bugreport.apple.com/](https://bugreport.apple.com/)
 
-## Installation
+## Usage
 
-Clone this repo or just download the script, then run it
+```
+$ curl -O https://raw.githubusercontent.com/nrbrook/MakeXcodePluginsWork/master/makeXcodePluginsWork
+$ chmod +x makeXcodePluginsWork
+$ ./makeXcodePluginsWork
+```
