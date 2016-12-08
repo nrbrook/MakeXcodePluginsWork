@@ -100,7 +100,7 @@ do
 				}
 
 				findPlugins "$pluginsDir"
-				options=$plugins
+				options=("${plugins[@]}")
 				findPlugins "$altPluginsDir"
 				options=( "${options[@]}" "${plugins[@]}" )
 
