@@ -96,7 +96,7 @@ do
 					plugins=()
 					while read -d '' -r; do
 					    plugins+=( "$REPLY" )
-					done < <(find "$1" -name "*.xcplugin" -maxdepth 1 -print0)
+					done < <(find "$1" -name "*.xcplugin" -maxdepth 1 -print0 2>/dev/null)
 				}
 
 				findPlugins "$pluginsDir"
