@@ -11,15 +11,15 @@ normal=$(tput sgr0)
 
 if pgrep "Xcode" > /dev/null
 then
-    printf "${bold}Xcode is Running, please quit first${normal}"
+    printf "${bold}Xcode is Running, please quit first${normal}\n"
     exit 1
 fi
 
 while true
 do
 
-	declare -a mainOptTests=("unsign" "restoreUnsigned" "restoreSigned" "update" "updateAll" "quit")
-	declare -a mainOpts=("Unsign Xcode" "Restore unsigned Xcode" "Restore signed Xcode" "Update specific plugins" "Update all plugins" "Quit")
+	declare -a mainOptTests=("unsign" "restoreUnsigned" "restoreSigned" "resetWarning" "update" "updateAll" "quit")
+	declare -a mainOpts=("Unsign Xcode" "Restore unsigned Xcode" "Restore signed Xcode" "Reset 'Load Bundles' Xcode warning" "Update specific plugins" "Update all plugins" "Quit")
 
 	if [ -f "$binaryPath.unsigned" ]; then
 		unset mainOptTests[2]
@@ -46,7 +46,7 @@ do
 		testRes=${mainOptTests[REPLY-1]}
 		case $testRes in
 			"unsign" )
-				printf "This will unsign Xcode. This can be reversed using this script. To continue, type 'unsign'. To cancel, hit return."
+				printf "This will unsign Xcode. This can be reversed using this script. To continue, type 'unsign'. To cancel, hit return.\n"
 				read typed
 				if [ "$typed" == "unsign" ] ; then
 					rm -rf "$tmpRepoPath"
@@ -83,6 +83,12 @@ do
 				sudo mv "$binaryPath" "$binaryPath.unsigned"
 				sudo mv "$binaryPath.signed" "$binaryPath"
 				printf "Restored signed binary"
+				break
+				;;
+			"resetWarning" )
+				version=$(defaults read /Applications/Xcode.app/Contents/version CFBundleShortVersionString)
+				defaults delete com.apple.dt.Xcode "DVTPlugInManagerNonApplePlugIns-Xcode-$version" > /dev/null 2>&1
+				printf "\nReset!\n"
 				break
 				;;
 			"update" | "updateAll" )
