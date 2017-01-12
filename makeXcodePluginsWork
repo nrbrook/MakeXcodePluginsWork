@@ -94,18 +94,32 @@ do
 					return 1
 				}
 
+				function checkIfLatestUUID {
+					existingUUIDs=($(defaults read "$1/Contents/Info" DVTPlugInCompatibilityUUIDs | sed "s/[,()\"]*//g"))
+					containsElement "$UUID" "${existingUUIDs[@]}"
+					return $?
+				}
+
 				found=0
 
 				function findPlugins {
 					plugins=()
 					while read -d '' -r; do
 						((found++))
-						existingUUIDs=($(defaults read "$REPLY/Contents/Info" DVTPlugInCompatibilityUUIDs | sed "s/[,()\"]*//g"))
-						containsElement "$UUID" "${existingUUIDs[@]}"
+						checkIfLatestUUID "$REPLY"
 						if [ $? -eq 1 ]; then
 						    plugins+=( "$REPLY" )
 					   	fi
 					done < <(find "$1" -name "*.xcplugin" -maxdepth 1 -print0 2>/dev/null)
+				}
+
+				function upgradePlugin {
+					checkIfLatestUUID "$1"
+					if [ $? -eq 0 ]; then
+						return 1
+					fi
+					defaults write "$1/Contents/Info"  DVTPlugInCompatibilityUUIDs -array-add $UUID
+			        return 0
 				}
 
 				findPlugins "$pluginsDir"
@@ -116,7 +130,7 @@ do
 				printf "\n"
 
 				if [ ${#options[@]} -eq 0 ]; then
-					printf "No plugins need upgrading! $found plugins found already have latest UUID."
+					printf "No plugins need upgrading! $found plugins found already have latest UUID.\n"
 					break
 				else
 					((upgraded=$found-${#options[@]}))
@@ -125,14 +139,10 @@ do
 					fi
 				fi
 
-				function upgradePlugin {
-					defaults write "$1/Contents/Info"  DVTPlugInCompatibilityUUIDs -array-add $UUID
-			        printf "Upgraded $1"
-				}
+				
 
 				if [ $testRes == "update" ]; then
 					printf "\n${bold}"
-					upgraded=()
 					PS3="${bold}Please select a plugin to update: ${normal}"
 					select opt in "${options[@]}" "Back" "Quit" ; do 
 						if (( REPLY == 1 + ${#options[@]} )) ; then
@@ -142,10 +152,9 @@ do
 							exit
 
 					    elif (( REPLY > 0 && REPLY <= ${#options[@]} )) ; then
-					    	containsElement "$opt" "${upgraded[@]}"
-					    	if [ $? -eq 1 ]; then
-						    	upgradePlugin "$opt"
-						    	upgraded+="$opt"
+					    	upgradePlugin "$opt"
+					    	if [ $? -eq 0 ]; then
+						    	printf "Upgraded $opt"
 						    else
 						    	printf "Already upgraded this plugin"
 						    fi
@@ -157,6 +166,9 @@ do
 				else
 					for i in "${options[@]}"; do
 			            upgradePlugin "$i"
+			            if [ $? -eq 0 ]; then
+			            	printf "Upgraded $i"
+			            fi
 			        done
 				fi
 				break
