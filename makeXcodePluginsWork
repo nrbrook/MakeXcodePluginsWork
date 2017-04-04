@@ -15,26 +15,168 @@ then
     exit 1
 fi
 
+function signedState {
+	if [ -f "$binaryPath.unsigned" ]; then
+		return 1 # binary is currently signed
+	elif [ -f "$binaryPath.signed" ]; then
+		return 2 # binary is currently unsigned
+	fi
+	return 0 # binary is currently signed
+}
+
+function restoreUnsigned {
+	sudo mv "$binaryPath" "$binaryPath.signed"
+	sudo mv "$binaryPath.unsigned" "$binaryPath"
+	printf "Restored unsigned binary\n"
+}
+
+function restoreSigned {
+	sudo mv "$binaryPath" "$binaryPath.unsigned"
+	sudo mv "$binaryPath.signed" "$binaryPath"
+	printf "Restored signed binary\n"
+}
+
+function unsign {
+	rm -rf "$tmpRepoPath"
+	mkdir "$tmpRepoPath"
+	cd $tmpRepoPath
+	printf "Cloning unsign repository\n"
+	git clone git@github.com:steakknife/unsign.git
+	cd unsign
+	make
+	
+	printf "Unsigning (admin permissions required)\n"
+	sudo ./unsign "$binaryPath"
+	status=$?
+	if [ $status -eq 0 ]; then
+		sudo mv "$binaryPath" "$binaryPath.signed"
+		sudo mv "$binaryPath.unsigned" "$binaryPath"
+		printf "Done!\n"
+	else
+		printf "Failed.\n"
+	fi
+	rm -rf "$tmpRepoPath"
+}
+
+function resetWarning {
+	version=$(defaults read /Applications/Xcode.app/Contents/version CFBundleShortVersionString)
+	defaults delete com.apple.dt.Xcode "DVTPlugInManagerNonApplePlugIns-Xcode-$version" > /dev/null 2>&1
+	printf "\nReset!\n"
+}
+
+UUID=$(defaults read /Applications/Xcode.app/Contents/Info DVTPlugInCompatibilityUUID)
+
+function containsElement {
+	local e
+	for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
+	return 1
+}
+
+function checkIfLatestUUID {
+	existingUUIDs=($(defaults read "$1/Contents/Info" DVTPlugInCompatibilityUUIDs | sed "s/[,()\"]*//g"))
+	containsElement "$UUID" "${existingUUIDs[@]}"
+	return $?
+}
+
+function upgradePlugin {
+	checkIfLatestUUID "$1"
+	if [ $? -eq 0 ]; then
+		return 1
+	fi
+	defaults write "$1/Contents/Info"  DVTPlugInCompatibilityUUIDs -array-add $UUID
+    return 0
+}
+
+function upgradePlugins {
+	found=0
+
+	function findPlugins {
+		plugins=()
+		while read -d '' -r; do
+			((found++))
+			checkIfLatestUUID "$REPLY"
+			if [ $? -eq 1 ]; then
+			    plugins+=( "$REPLY" )
+		   	fi
+		done < <(find "$1" -name "*.xcplugin" -maxdepth 1 -print0 2>/dev/null)
+	}
+
+	findPlugins "$pluginsDir"
+	options=("${plugins[@]}")
+	findPlugins "$altPluginsDir"
+	options=( "${options[@]}" "${plugins[@]}" )
+
+	printf "\n"
+
+	if [ ${#options[@]} -eq 0 ]; then
+		printf "No plugins need upgrading! $found plugins found already have latest UUID.\n"
+		break
+	else
+		((upgraded=$found-${#options[@]}))
+		if [ $upgraded -gt 0 ]; then
+			printf "$upgraded plugins already have latest UUID.\n"
+		fi
+	fi
+
+	
+
+	if [ $1 == "update" ]; then
+		printf "\n${bold}"
+		PS3="${bold}Please select a plugin to update: ${normal}"
+		select opt in "${options[@]}" "Back" "Quit" ; do 
+			if (( REPLY == 1 + ${#options[@]} )) ; then
+				break
+
+			elif (( REPLY == 2 + ${#options[@]} )) ; then
+				exit
+
+		    elif (( REPLY > 0 && REPLY <= ${#options[@]} )) ; then
+		    	upgradePlugin "$opt"
+		    	if [ $? -eq 0 ]; then
+			    	printf "Upgraded $opt"
+			    else
+			    	printf "Already upgraded this plugin"
+			    fi
+		    else
+		        printf "Invalid option. Try another one."
+		    fi
+		    printf "\n"
+		done
+	else
+		for i in "${options[@]}"; do
+            upgradePlugin "$i"
+            if [ $? -eq 0 ]; then
+            	printf "Upgraded $i"
+            fi
+        done
+	fi
+}
+
 while true
 do
 
-	declare -a mainOptTests=("unsign" "restoreUnsigned" "restoreSigned" "resetWarning" "update" "updateAll" "quit")
-	declare -a mainOpts=("Unsign Xcode" "Restore unsigned Xcode" "Restore signed Xcode" "Reset 'Load Bundles' Xcode warning" "Update specific plugins" "Update all plugins" "Quit")
+	declare -a mainOptTests=("all" "unsign" "restoreUnsigned" "restoreSigned" "resetWarning" "update" "updateAll" "quit")
+	declare -a mainOpts=("Just make it work! (unsign, reset warning, update plugins)" "Unsign Xcode" "Restore unsigned Xcode" "Restore signed Xcode" "Reset 'Load Bundles' Xcode warning" "Update specific plugins" "Update all plugins" "Quit")
 
-	if [ -f "$binaryPath.unsigned" ]; then
-		unset mainOptTests[2]
-		unset mainOpts[2]
-	elif [ -f "$binaryPath.signed" ]; then
-		unset mainOpts[0]
-		unset mainOptTests[0]
-		unset mainOpts[1]
-		unset mainOptTests[1]
-	else
-		unset mainOpts[1]
-		unset mainOptTests[1]
-		unset mainOpts[2]
-		unset mainOptTests[2]
-	fi
+	signedState
+	case $? in
+		0) # fresh xcode, currently signed, remove both 'restore' options
+			unset mainOpts[2]
+			unset mainOptTests[2]
+			unset mainOpts[3]
+			unset mainOptTests[3]
+			;;
+		1) # unsigned binary present, currently signed remove 'restore signed'
+			unset mainOptTests[3]
+			unset mainOpts[3]
+			;;
+		2) # signed binary present, currently unsigned, remove 'unsign' and 'restore unsigned'
+			unset mainOpts[1]
+			unset mainOptTests[1]
+			unset mainOpts[2]
+			unset mainOptTests[2]
+			;;
+	esac
 
 	mainOptTests=( "${mainOptTests[@]}" )
 	mainOpts=( "${mainOpts[@]}" )
@@ -45,138 +187,38 @@ do
 		printf "${normal}"
 		testRes=${mainOptTests[REPLY-1]}
 		case $testRes in
+			"all" )
+				signedState
+				case $? in
+					0)
+						unsign
+						;;
+					1) 
+						restoreUnsigned
+						;;
+				esac
+				resetWarning
+				upgradePlugins "updateAll"
+				break
+				;;
 			"unsign" )
-				printf "This will unsign Xcode. This can be reversed using this script. To continue, type 'unsign'. To cancel, hit return.\n"
-				read typed
-				if [ "$typed" == "unsign" ] ; then
-					rm -rf "$tmpRepoPath"
-					mkdir "$tmpRepoPath"
-					cd $tmpRepoPath
-					printf "Cloning unsign repository"
-					git clone git@github.com:steakknife/unsign.git
-					cd unsign
-					make
-					
-					printf "Unsigning (admin permissions required)"
-					sudo ./unsign "$binaryPath"
-					status=$?
-					if [ $status -eq 0 ]; then
-						sudo mv "$binaryPath" "$binaryPath.signed"
-						sudo mv "$binaryPath.unsigned" "$binaryPath"
-						printf "Done!"
-					else
-						printf "Failed."
-					fi
-					rm -rf "$tmpRepoPath"
-				else
-					printf "Didn't type unsign."
-				fi
+				unsign
 				break
 				;;
 			"restoreUnsigned" )
-				sudo mv "$binaryPath" "$binaryPath.signed"
-				sudo mv "$binaryPath.unsigned" "$binaryPath"
-				printf "Restored unsigned binary"
+				restoreUnsigned
 				break
 				;;
 			"restoreSigned" )
-				sudo mv "$binaryPath" "$binaryPath.unsigned"
-				sudo mv "$binaryPath.signed" "$binaryPath"
-				printf "Restored signed binary"
+				restoreSigned
 				break
 				;;
 			"resetWarning" )
-				version=$(defaults read /Applications/Xcode.app/Contents/version CFBundleShortVersionString)
-				defaults delete com.apple.dt.Xcode "DVTPlugInManagerNonApplePlugIns-Xcode-$version" > /dev/null 2>&1
-				printf "\nReset!\n"
+				resetWarning
 				break
 				;;
 			"update" | "updateAll" )
-				UUID=$(defaults read /Applications/Xcode.app/Contents/Info DVTPlugInCompatibilityUUID)
-
-				function containsElement {
-					local e
-					for e in "${@:2}"; do [[ "$e" == "$1" ]] && return 0; done
-					return 1
-				}
-
-				function checkIfLatestUUID {
-					existingUUIDs=($(defaults read "$1/Contents/Info" DVTPlugInCompatibilityUUIDs | sed "s/[,()\"]*//g"))
-					containsElement "$UUID" "${existingUUIDs[@]}"
-					return $?
-				}
-
-				found=0
-
-				function findPlugins {
-					plugins=()
-					while read -d '' -r; do
-						((found++))
-						checkIfLatestUUID "$REPLY"
-						if [ $? -eq 1 ]; then
-						    plugins+=( "$REPLY" )
-					   	fi
-					done < <(find "$1" -name "*.xcplugin" -maxdepth 1 -print0 2>/dev/null)
-				}
-
-				function upgradePlugin {
-					checkIfLatestUUID "$1"
-					if [ $? -eq 0 ]; then
-						return 1
-					fi
-					defaults write "$1/Contents/Info"  DVTPlugInCompatibilityUUIDs -array-add $UUID
-			        return 0
-				}
-
-				findPlugins "$pluginsDir"
-				options=("${plugins[@]}")
-				findPlugins "$altPluginsDir"
-				options=( "${options[@]}" "${plugins[@]}" )
-
-				printf "\n"
-
-				if [ ${#options[@]} -eq 0 ]; then
-					printf "No plugins need upgrading! $found plugins found already have latest UUID.\n"
-					break
-				else
-					((upgraded=$found-${#options[@]}))
-					if [ $upgraded -gt 0 ]; then
-						printf "$upgraded plugins already have latest UUID.\n"
-					fi
-				fi
-
-				
-
-				if [ $testRes == "update" ]; then
-					printf "\n${bold}"
-					PS3="${bold}Please select a plugin to update: ${normal}"
-					select opt in "${options[@]}" "Back" "Quit" ; do 
-						if (( REPLY == 1 + ${#options[@]} )) ; then
-							break
-
-						elif (( REPLY == 2 + ${#options[@]} )) ; then
-							exit
-
-					    elif (( REPLY > 0 && REPLY <= ${#options[@]} )) ; then
-					    	upgradePlugin "$opt"
-					    	if [ $? -eq 0 ]; then
-						    	printf "Upgraded $opt"
-						    else
-						    	printf "Already upgraded this plugin"
-						    fi
-					    else
-					        printf "Invalid option. Try another one."
-					    fi
-					    printf "\n"
-					done
-				else
-					for i in "${options[@]}"; do
-			            upgradePlugin "$i"
-			            if [ $? -eq 0 ]; then
-			            	printf "Upgraded $i"
-			            fi
-			        done
-				fi
+				upgradePlugins $testRes
 				break
 				;;
 			"quit" )
