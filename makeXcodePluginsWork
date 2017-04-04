@@ -11,8 +11,11 @@ normal=$(tput sgr0)
 
 if pgrep "Xcode" > /dev/null
 then
-    printf "${bold}Xcode is Running, please quit first${normal}\n"
-    exit 1
+	printf "${bold}Xcode is Running, please quit now...${normal}\n"
+	while pgrep "Xcode" > /dev/null
+	do
+		sleep 1
+	done
 fi
 
 function signedState {
@@ -159,7 +162,8 @@ do
 	declare -a mainOpts=("Just make it work! (unsign, reset warning, update plugins)" "Unsign Xcode" "Restore unsigned Xcode" "Restore signed Xcode" "Reset 'Load Bundles' Xcode warning" "Update specific plugins" "Update all plugins" "Quit")
 
 	signedState
-	case $? in
+	SS=$?
+	case $SS in
 		0) # fresh xcode, currently signed, remove both 'restore' options
 			unset mainOpts[2]
 			unset mainOptTests[2]
@@ -189,7 +193,7 @@ do
 		case $testRes in
 			"all" )
 				signedState
-				case $? in
+				case $SS in
 					0)
 						unsign
 						;;
