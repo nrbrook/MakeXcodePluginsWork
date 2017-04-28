@@ -10,7 +10,7 @@ Also, each version of Xcode has it's own UUID which needs to be listed inside th
 
 Uses the unsign project at [https://github.com/steakknife/unsign](https://github.com/steakknife/unsign)
 
-This doesn't fix the problem long term! If you like plugins, Be sure to file a radar at [https://bugreport.apple.com/](https://bugreport.apple.com/)
+This doesn't fix the problem long term! If you like plugins, Be sure to file a radar at [https://bugreport.apple.com/](https://bugreport.apple.com/) detailing which ones, and hopefully Apple will add the necessary APIs to its extension capability in future.
 
 ## Usage
 
